@@ -1,6 +1,6 @@
 import rospy
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import numpy as np
 from ultralytics import YOLO
@@ -44,6 +44,21 @@ def image_callback(msg):
         cv2.polylines(cv_image, [points], isClosed=True, color=(255, 0, 255), thickness=3)
         cv2.putText(cv_image, str(id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
+        # Cropping with buffer
+        buffer = 20  # Adjust buffer size as needed
+        x_min, y_min = np.min(points, axis=0)
+        x_max, y_max = np.max(points, axis=0)
+        x_min = max(x_min - buffer, 0)
+        y_min = max(y_min - buffer, 0)
+        x_max = min(x_max + buffer, cv_image.shape[1])
+        y_max = min(y_max + buffer, cv_image.shape[0])
+        cropped_image = cv_image[y_min:y_max, x_min:x_max]
+
+        try:
+            crop_pub.publish(bridge.cv2_to_imgmsg(cropped_image, "bgr8"))
+        except CvBridgeError as e:
+            print(e)
+
     try:
         image_pub.publish(bridge.cv2_to_imgmsg(cv_image, "bgr8"))
     except CvBridgeError as e:
@@ -53,6 +68,7 @@ if __name__ == '__main__':
     rospy.init_node('image_processor', anonymous=True)
     image_sub = rospy.Subscriber("/oak/right/image_raw", Image, image_callback)
     image_pub = rospy.Publisher("/oak/right/annotated", Image, queue_size=10)
+    crop_pub = rospy.Publisher("/oak/right/cropped", Image, queue_size=10)
     try:
         rospy.spin()
     except KeyboardInterrupt:
