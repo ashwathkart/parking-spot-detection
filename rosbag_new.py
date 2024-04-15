@@ -5,6 +5,9 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+sobel_kernel_size = 3
+sobel_min_threshold = 90
+
 MODEL_WEIGHT_PATH = 'best_obb1.pt'
 model = YOLO(MODEL_WEIGHT_PATH)
 bbox_id_counter = 1
@@ -55,10 +58,13 @@ def image_callback(msg):
         cropped_image = cropped_image[y_min:y_max, x_min:x_max]
 
         gray = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
-        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5)
-        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5)
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel_size)
+        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel_size)
         sobel = cv2.magnitude(sobelx, sobely)
-        sobel_normalized = cv2.convertScaleAbs(sobel)  # Normalize the result to 8-bit
+
+        _, sobel_thresholded = cv2.threshold(sobel, sobel_min_threshold, 255, cv2.THRESH_BINARY)
+
+        sobel_normalized = cv2.convertScaleAbs(sobel_thresholded)  # Normalize the result to 8-bit
 
         try:
             gradient_pub.publish(bridge.cv2_to_imgmsg(sobel_normalized, "mono8"))
@@ -73,6 +79,7 @@ def image_callback(msg):
             box_pub.publish(bridge.cv2_to_imgmsg(cv_image, "bgr8"))
         except CvBridgeError as e:
             print("CvBridge Error during box or crop publishing:", e)
+
 
 
 if __name__ == '__main__':
