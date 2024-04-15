@@ -24,7 +24,7 @@ def empty_detect(img):
     for box, conf in zip(results[0].obb, results[0].obb.conf):
         class_id = int(box.cls[0].item())
         confidence = float(conf.item())
-        if class_id == 0 and confidence >= 0.70:  # Assuming '0' is the class for empty spots
+        if class_id == 0 and confidence >= 0.85:  # Assuming '0' is the class for empty spots
             x, y, w, h, r = box.xywhr[0].tolist()
             return (bbox_id_counter, x, y, w, h, r)
     return None
@@ -37,22 +37,27 @@ def image_callback(msg):
     except CvBridgeError as e:
         print(e)
 
+    # Create a copy of the original image for cropping
+    cropped_image = cv_image.copy()
+
     bbox_info = empty_detect(cv_image)
     if bbox_info:
         id, x, y, w, h, r = bbox_info
         points = get_rotated_box_points(x, y, w, h, -r)
-        cv2.polylines(cv_image, [points], isClosed=True, color=(255, 0, 255), thickness=3)
-        cv2.putText(cv_image, str(id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
-        # Cropping with buffer
+        # Crop the image before annotations are added
         buffer = 20  # Adjust buffer size as needed
         x_min, y_min = np.min(points, axis=0)
         x_max, y_max = np.max(points, axis=0)
         x_min = max(x_min - buffer, 0)
         y_min = max(y_min - buffer, 0)
-        x_max = min(x_max + buffer, cv_image.shape[1])
-        y_max = min(y_max + buffer, cv_image.shape[0])
-        cropped_image = cv_image[y_min:y_max, x_min:x_max]
+        x_max = min(x_max + buffer, cropped_image.shape[1])
+        y_max = min(y_max + buffer, cropped_image.shape[0])
+        cropped_image = cropped_image[y_min:y_max, x_min:x_max]
+
+        # Now annotate the original image
+        cv2.polylines(cv_image, [points], isClosed=True, color=(255, 0, 255), thickness=3)
+        cv2.putText(cv_image, str(id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
         try:
             crop_pub.publish(bridge.cv2_to_imgmsg(cropped_image, "bgr8"))
@@ -60,14 +65,14 @@ def image_callback(msg):
             print(e)
 
     try:
-        image_pub.publish(bridge.cv2_to_imgmsg(cv_image, "bgr8"))
+        box_pub.publish(bridge.cv2_to_imgmsg(cv_image, "bgr8"))
     except CvBridgeError as e:
         print(e)
 
 if __name__ == '__main__':
     rospy.init_node('image_processor', anonymous=True)
     image_sub = rospy.Subscriber("/oak/right/image_raw", Image, image_callback)
-    image_pub = rospy.Publisher("/oak/right/annotated", Image, queue_size=10)
+    box_pub = rospy.Publisher("/oak/right/box", Image, queue_size=10)
     crop_pub = rospy.Publisher("/oak/right/cropped", Image, queue_size=10)
     try:
         rospy.spin()
