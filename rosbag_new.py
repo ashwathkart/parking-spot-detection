@@ -64,12 +64,15 @@ def image_callback(msg):
 
         _, sobel_thresholded = cv2.threshold(sobel, sobel_min_threshold, 255, cv2.THRESH_BINARY)
 
-        sobel_normalized = cv2.convertScaleAbs(sobel_thresholded)  # Normalize the result to 8-bit
+        # Mask green on the white lines detected by Sobel in the original image
+        mask = (sobel_thresholded > 0)
+        canvas = cv_image.copy()
+        canvas[y_min:y_max, x_min:x_max][mask] = [0, 255, 0]  # Green mask on detected lines
 
         try:
-            gradient_pub.publish(bridge.cv2_to_imgmsg(sobel_normalized, "mono8"))
+            modified_image_pub.publish(bridge.cv2_to_imgmsg(canvas, "bgr8"))
         except CvBridgeError as e:
-            print("CvBridge Error during gradient publishing:", e)
+            print("CvBridge Error during modified image publishing:", e)
 
         cv2.polylines(cv_image, [points], isClosed=True, color=(255, 0, 255), thickness=3)
         cv2.putText(cv_image, str(id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
@@ -80,14 +83,14 @@ def image_callback(msg):
         except CvBridgeError as e:
             print("CvBridge Error during box or crop publishing:", e)
 
-
-
 if __name__ == '__main__':
     rospy.init_node('image_processor', anonymous=True)
     image_sub = rospy.Subscriber("/oak/right/image_raw", Image, image_callback)
     box_pub = rospy.Publisher("/oak/right/box", Image, queue_size=10)
     crop_pub = rospy.Publisher("/oak/right/cropped", Image, queue_size=10)
     gradient_pub = rospy.Publisher("/oak/right/gradient", Image, queue_size=10)
+    modified_image_pub = rospy.Publisher("/oak/right/modified_image", Image, queue_size=10)
+
     try:
         rospy.spin()
     except KeyboardInterrupt:
