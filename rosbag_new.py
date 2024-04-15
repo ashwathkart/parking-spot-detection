@@ -24,7 +24,7 @@ def empty_detect(img):
     for box, conf in zip(results[0].obb, results[0].obb.conf):
         class_id = int(box.cls[0].item())
         confidence = float(conf.item())
-        if class_id == 0 and confidence >= 0.85:  # Assuming '0' is the class for empty spots
+        if class_id == 0 and confidence >= 0.85:
             x, y, w, h, r = box.xywhr[0].tolist()
             return (bbox_id_counter, x, y, w, h, r)
     return None
@@ -35,9 +35,9 @@ def image_callback(msg):
     try:
         cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
     except CvBridgeError as e:
-        print(e)
+        print("CvBridge Error:", e)
+        return
 
-    # Create a copy of the original image for cropping
     cropped_image = cv_image.copy()
 
     bbox_info = empty_detect(cv_image)
@@ -45,8 +45,7 @@ def image_callback(msg):
         id, x, y, w, h, r = bbox_info
         points = get_rotated_box_points(x, y, w, h, -r)
 
-        # Crop the image before annotations are added
-        buffer = 20  # Adjust buffer size as needed
+        buffer = 20
         x_min, y_min = np.min(points, axis=0)
         x_max, y_max = np.max(points, axis=0)
         x_min = max(x_min - buffer, 0)
@@ -55,25 +54,33 @@ def image_callback(msg):
         y_max = min(y_max + buffer, cropped_image.shape[0])
         cropped_image = cropped_image[y_min:y_max, x_min:x_max]
 
-        # Now annotate the original image
+        gray = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5)
+        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5)
+        sobel = cv2.magnitude(sobelx, sobely)
+        sobel_normalized = cv2.convertScaleAbs(sobel)  # Normalize the result to 8-bit
+
+        try:
+            gradient_pub.publish(bridge.cv2_to_imgmsg(sobel_normalized, "mono8"))
+        except CvBridgeError as e:
+            print("CvBridge Error during gradient publishing:", e)
+
         cv2.polylines(cv_image, [points], isClosed=True, color=(255, 0, 255), thickness=3)
         cv2.putText(cv_image, str(id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
         try:
             crop_pub.publish(bridge.cv2_to_imgmsg(cropped_image, "bgr8"))
+            box_pub.publish(bridge.cv2_to_imgmsg(cv_image, "bgr8"))
         except CvBridgeError as e:
-            print(e)
+            print("CvBridge Error during box or crop publishing:", e)
 
-    try:
-        box_pub.publish(bridge.cv2_to_imgmsg(cv_image, "bgr8"))
-    except CvBridgeError as e:
-        print(e)
 
 if __name__ == '__main__':
     rospy.init_node('image_processor', anonymous=True)
     image_sub = rospy.Subscriber("/oak/right/image_raw", Image, image_callback)
     box_pub = rospy.Publisher("/oak/right/box", Image, queue_size=10)
     crop_pub = rospy.Publisher("/oak/right/cropped", Image, queue_size=10)
+    gradient_pub = rospy.Publisher("/oak/right/gradient", Image, queue_size=10)
     try:
         rospy.spin()
     except KeyboardInterrupt:
