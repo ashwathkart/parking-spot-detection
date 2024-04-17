@@ -71,6 +71,7 @@ def image_callback(msg):
         sobel = cv2.magnitude(sobelx, sobely)
 
         _, sobel_thresholded = cv2.threshold(sobel, sobel_min_threshold, 255, cv2.THRESH_BINARY)
+        sobel_thresholded = np.uint8(sobel_thresholded)  # Convert to 8-bit
 
         # cv2.imshow('Sobel Thresholded', sobel_thresholded)
         # cv2.waitKey(0)
