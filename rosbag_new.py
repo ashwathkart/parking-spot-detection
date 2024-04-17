@@ -4,7 +4,6 @@ from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import numpy as np
 from ultralytics import YOLO
-import threading
 
 sobel_kernel_size = 3
 sobel_min_threshold = 90
@@ -34,12 +33,9 @@ def empty_detect(img):
             return (bbox_id_counter, x, y, w, h, r)
     return None
 
-overlay_image = None
-
 def image_callback(msg):
-    global bbox_id_counter, overlay_image
+    global bbox_id_counter
     bbox_id_counter = 1
-    bridge = CvBridge()
     try:
         cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
     except CvBridgeError as e:
@@ -48,8 +44,6 @@ def image_callback(msg):
 
     # Always use a copy of the original image for modifications
     canvas = cv_image.copy()
-
-    overlay_image = canvas.copy()
 
     bbox_info = empty_detect(cv_image)
     if bbox_info:
@@ -72,46 +66,9 @@ def image_callback(msg):
 
         _, sobel_thresholded = cv2.threshold(sobel, sobel_min_threshold, 255, cv2.THRESH_BINARY)
 
-        # cv2.imshow('Sobel Thresholded', sobel_thresholded)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
-
         # Apply the green mask on detected lines in the original image within the bounding box
         mask = (sobel_thresholded > 0)
         canvas[y_min:y_max, x_min:x_max][mask] = [0, 255, 0]  # Green mask on detected line
-
-        # cv2.imshow('Sobel Thresholded with green line', canvas)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
-        
-        # Find contours which correspond to the lines of the parking lot.
-        contours, _ = cv2.findContours(sobel_thresholded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        # Assuming the two longest contours correspond to the left and right lines of the parking spot.
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:2]
-
-        # Calculate the x-coordinates of the vertical lines (left and right)
-        x_left = min([cv2.boundingRect(cnt)[0] for cnt in contours])
-        x_right = max([cv2.boundingRect(cnt)[0] + cv2.boundingRect(cnt)[2] for cnt in contours])
-
-        # Calculate the x-coordinate for the middle line
-        x_middle = (x_left + x_right) // 2
-        
-        x_middle_pixels = [] 
-
-        # Draw the middle line on the original image and generate pixel vals
-        height, width = canvas.shape[:2]
-        for y in range(height):
-            x_middle_pixels.append(canvas[y, x_middle])
-        canvas[y, x_middle] = (0, 0, 255)  # draw the line
-
-        for pixel in x_middle_pixels:
-            print(pixel)
-
-        
-        cv2.imshow('Middle Line Overlay', canvas)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
 
     try:
         modified_image_pub.publish(bridge.cv2_to_imgmsg(canvas, "bgr8"))
@@ -124,19 +81,6 @@ if __name__ == '__main__':
     modified_image_pub = rospy.Publisher("/oak/right/modified_image", Image, queue_size=10)
 
     try:
-        # Start the spinning in a separate thread so that we can perform other tasks in the main thread
-        spin_thread = threading.Thread(target=rospy.spin)
-        spin_thread.start()
-
-        while not rospy.is_shutdown():
-            if overlay_image is not None:
-                # If the global image variable is not None, show it
-                cv2.imshow('Middle Line Overlay', overlay_image)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-
-        spin_thread.join()  # Wait for the spin thread to finish
+        rospy.spin()
     except KeyboardInterrupt:
         print("Shutting down")
-
-    cv2.destroyAllWindows()
