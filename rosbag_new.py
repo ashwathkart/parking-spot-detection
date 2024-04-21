@@ -17,8 +17,23 @@ bridge = CvBridge()
 def get_midpoint(p1, p2):
     return ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
 
+def draw_center_line(canvas):
+    height, width = canvas.shape[:2]  # Get the shape of the image
+    mid_x = width // 2  # Calculate the midpoint of width
+    
+    cv2.line(canvas, (mid_x, 0), (mid_x, height), (255, 0, 0), 2)  
+
+    return canvas
+
+# acute angle between midpoint box line and middle of the screen line
+def calculate_angle(point1, point2):
+    dx = point2[0] - point1[0]
+    dy = point2[1] - point1[1]
+    angle_radians = np.arctan2(dy, dx)
+    return angle_radians
+
 def draw_equidistant_line(points, canvas):
-    # Sort the points based on their y-values (or x-values if the lines are more horizontal than vertical)
+    # Sort the points based on their y-values 
     points = sorted(points, key=lambda x: x[1])
 
     # Assume the first and last points after sorting belong to the longest lines
@@ -29,18 +44,26 @@ def draw_equidistant_line(points, canvas):
     top_mid = get_midpoint(p1, p2)
     bottom_mid = get_midpoint(p3, p4)
 
-    # Draw the red equidistant line
-    cv2.line(canvas, top_mid, bottom_mid, (0, 0, 255), 2)  # Red color in BGR
+    # Draw the red midpoint line
+    cv2.line(canvas, top_mid, bottom_mid, (0, 0, 255), 2)  
 
-    # Print pixel values along the line
-    line_length = int(np.hypot(bottom_mid[0] - top_mid[0], bottom_mid[1] - top_mid[1]))
-    for i in range(line_length):
-        position = (top_mid[0] + i * (bottom_mid[0] - top_mid[0]) // line_length,
-                    top_mid[1] + i * (bottom_mid[1] - top_mid[1]) // line_length)
-        pixel_value = canvas[position[1], position[0]]
-        print(f"Pixel value at {position}: {pixel_value}")
+    # Calculate the angle of the red line relative to the horizontal in radians
+    angle_red = calculate_angle(top_mid, bottom_mid)
+    # Compute the positive difference from π/2 radians (90 degrees in radians)
+    angle_between = abs(np.pi/2 - angle_red)  # Ensure the result is always positive
+    print(f"Angle between the red and blue lines: {angle_between} radians")
+
+    # # Print pixel values along the line
+    # line_length = int(np.hypot(bottom_mid[0] - top_mid[0], bottom_mid[1] - top_mid[1]))
+    # for i in range(line_length):
+    #     position = (top_mid[0] + i * (bottom_mid[0] - top_mid[0]) // line_length,
+    #                 top_mid[1] + i * (bottom_mid[1] - top_mid[1]) // line_length)
+    #     pixel_value = canvas[position[1], position[0]]
+    #     print(f"Pixel value at {position}: {pixel_value}")
 
     return canvas
+
+
 
 def get_rotated_box_points(x, y, width, height, angle):
     rectangle = np.array([[-width / 2, -height / 2], [width / 2, -height / 2],
@@ -60,6 +83,16 @@ def empty_detect(img):
             x, y, w, h, r = box.xywhr[0].tolist()
             return (bbox_id_counter, x, y, w, h, r)
     return None
+
+# sanity checking
+
+def perpendicular_distance(point, line_start, line_end):
+    # Calculate the distance of a point to a line defined by two points (line_start and line_end)
+    num = abs((line_end[1] - line_start[1]) * point[0] - (line_end[0] - line_start[0]) * point[1] + line_end[0] * line_start[1] - line_end[1] * line_start[0])
+    den = np.sqrt((line_end[1] - line_start[1])**2 + (line_end[0] - line_start[0])**2)
+    return num / den
+
+
 
 def image_callback(msg):
     global bbox_id_counter
@@ -99,6 +132,8 @@ def image_callback(msg):
         canvas[y_min:y_max, x_min:x_max][mask] = [0, 255, 0]  # Green mask on detected line
 
         canvas = draw_equidistant_line(points, canvas)
+
+        canvas = draw_center_line(canvas)
 
         cv2.imshow('midpoint line', canvas)
         cv2.waitKey(0)
