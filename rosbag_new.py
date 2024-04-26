@@ -20,9 +20,9 @@ def get_midpoint(p1, p2):
 def draw_center_line(canvas):
     height, width = canvas.shape[:2]  # Get the shape of the image
     mid_x = width // 2  # Calculate the midpoint of width
-    
-    cv2.line(canvas, (mid_x, 0), (mid_x, height), (255, 0, 0), 2)  
-
+    mid_y = height // 2  # Calculate the midpoint of height
+        # Draw the middle line
+    cv2.line(canvas, (mid_x, 0), (mid_x, height), (255, 0, 0), 2)
     return canvas
 
 # acute angle between midpoint box line and middle of the screen line
@@ -47,22 +47,19 @@ def draw_equidistant_line(points, canvas):
     # Draw the red midpoint line
     cv2.line(canvas, top_mid, bottom_mid, (0, 0, 255), 2)  
 
+    # Calculate the midpoint of the red line
+    red_line_midpoint = get_midpoint(top_mid, bottom_mid)
+
+    # Print the coordinate of the midpoint of the red line
+    print(f"Midpoint of the red line: {red_line_midpoint}")
+    
     # Calculate the angle of the red line relative to the horizontal in radians
     angle_red = calculate_angle(top_mid, bottom_mid)
     # Compute the positive difference from π/2 radians (90 degrees in radians)
     angle_between = abs(np.pi/2 - angle_red)  # Ensure the result is always positive
     print(f"Angle between the red and blue lines: {angle_between} radians")
 
-    # # Print pixel values along the line
-    # line_length = int(np.hypot(bottom_mid[0] - top_mid[0], bottom_mid[1] - top_mid[1]))
-    # for i in range(line_length):
-    #     position = (top_mid[0] + i * (bottom_mid[0] - top_mid[0]) // line_length,
-    #                 top_mid[1] + i * (bottom_mid[1] - top_mid[1]) // line_length)
-    #     pixel_value = canvas[position[1], position[0]]
-    #     print(f"Pixel value at {position}: {pixel_value}")
-
     return canvas
-
 
 
 def get_rotated_box_points(x, y, width, height, angle):
@@ -91,8 +88,6 @@ def perpendicular_distance(point, line_start, line_end):
     num = abs((line_end[1] - line_start[1]) * point[0] - (line_end[0] - line_start[0]) * point[1] + line_end[0] * line_start[1] - line_end[1] * line_start[0])
     den = np.sqrt((line_end[1] - line_start[1])**2 + (line_end[0] - line_start[0])**2)
     return num / den
-
-
 
 def image_callback(msg):
     global bbox_id_counter
@@ -134,10 +129,6 @@ def image_callback(msg):
         canvas = draw_equidistant_line(points, canvas)
 
         canvas = draw_center_line(canvas)
-
-        cv2.imshow('midpoint line', canvas)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
 
     try:
         modified_image_pub.publish(bridge.cv2_to_imgmsg(canvas, "bgr8"))
