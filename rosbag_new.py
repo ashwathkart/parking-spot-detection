@@ -120,6 +120,20 @@ def image_callback(msg):
         sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel_size)
         sobel = cv2.magnitude(sobelx, sobely)
 
+        src_points = np.float32(points)
+        dst_points = np.float32([[x_min, y_min], [x_min + w, y_min], [x_min + w, y_min + h], [x_min, y_min + h]])
+        M = cv2.getPerspectiveTransform(src_points, dst_points)
+
+        transformed_points = cv2.perspectiveTransform(src_points.reshape(-1, 1, 2), M)
+        transformed_points = np.round(transformed_points.reshape(points.shape), 2)
+        transformed_points = transformed_points.astype(int)
+        transformed_points[0], transformed_points[1], transformed_points[2], transformed_points[3] = transformed_points[2], transformed_points[3], transformed_points[0], transformed_points[1]
+
+        print("previous points: ", points)
+        print("tranform points: ", transformed_points)
+
+        points = transformed_points
+
         _, sobel_thresholded = cv2.threshold(sobel, sobel_min_threshold, 255, cv2.THRESH_BINARY)
 
         # Apply the green mask on detected lines in the original image within the bounding box
