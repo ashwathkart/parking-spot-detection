@@ -127,7 +127,6 @@ def image_callback(msg):
         transformed_points = cv2.perspectiveTransform(src_points.reshape(-1, 1, 2), M)
         transformed_points = np.round(transformed_points.reshape(points.shape), 2)
         transformed_points = transformed_points.astype(int)
-        transformed_points[0], transformed_points[1], transformed_points[2], transformed_points[3] = transformed_points[2], transformed_points[3], transformed_points[0], transformed_points[1]
 
         print("previous points: ", points)
         print("tranform points: ", transformed_points)
